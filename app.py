@@ -1,89 +1,99 @@
 import streamlit as st
-import joblib
-import os
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
-# -----------------------------
-# Page config
-# -----------------------------
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import accuracy_score
+
+# ------------------ PAGE CONFIG ------------------
 st.set_page_config(
-    page_title="Student Result Prediction",
-    page_icon="🎓",
-    layout="centered"
+    page_title="AI Student Performance Prediction",
+    layout="wide"
 )
 
-# -----------------------------
-# Load model & scaler
-# -----------------------------
-ROOT_DIR = os.path.abspath(os.path.dirname(__file__))
+# ------------------ LOAD DATA ------------------
+@st.cache_data
+def load_data():
+    return pd.read_csv("student_performance_10000.csv")
 
-MODEL_PATH = os.path.join(ROOT_DIR, "model", "logistic_model.pkl")
-SCALER_PATH = os.path.join(ROOT_DIR, "model", "scaler.pkl")
+df = load_data()
 
-if not os.path.exists(MODEL_PATH):
-    st.error("❌ Model not found. Train the model first.")
-    st.stop()
+# ------------------ MODEL TRAINING ------------------
+features = ["StudyHours", "Attendance", "InternalMarks", "PreviousScore"]
+X = df[features]
+y_class = df["Result"]
+y_marks = df["TotalMarks"]
 
-model = joblib.load(MODEL_PATH)
-scaler = joblib.load(SCALER_PATH)
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
 
-# -----------------------------
-# Title & description
-# -----------------------------
-st.title("🎓 Student Result Prediction System")
-st.markdown(
-    """
-    This system predicts whether a student will **Pass or Fail**
-    using **Logistic Regression** based on:
-    - Study Hours
-    - Attendance
-    """
+X_train, X_test, y_train, y_test = train_test_split(
+    X_scaled, y_class, test_size=0.2, random_state=42
 )
 
-st.divider()
+clf = LogisticRegression()
+clf.fit(X_train, y_train)
 
-# -----------------------------
-# User inputs (LIVE)
-# -----------------------------
-study_hours = st.slider(
-    "📘 Study Hours (per day)",
-    min_value=0.0,
-    max_value=10.0,
-    step=0.1
-)
+reg = RandomForestRegressor(n_estimators=100, random_state=42)
+reg.fit(X_scaled, y_marks)
 
-attendance = st.slider(
-    "📊 Attendance (%)",
-    min_value=0.0,
-    max_value=100.0,
-    step=1.0
-)
+accuracy = accuracy_score(y_test, clf.predict(X_test))
 
-# -----------------------------
-# Prediction
-# -----------------------------
-if st.button("🔍 Predict Result"):
-    input_df = pd.DataFrame(
-        [[study_hours, attendance]],
-        columns=["StudyHours", "Attendance"]
-    )
+# ------------------ SIDEBAR ------------------
+st.sidebar.title("🎛 Control Panel")
+st.sidebar.metric("Model Accuracy", f"{accuracy*100:.2f}%")
 
+# ------------------ MAIN UI ------------------
+st.markdown("<h1 style='text-align:center'>🎓 AI-Powered Student Performance Prediction</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align:center'>Hybrid ML System with Live Prediction</p>", unsafe_allow_html=True)
+
+col1, col2 = st.columns(2)
+
+with col1:
+    study_hours = st.number_input("📘 Study Hours per Day", 0.0, 12.0, step=0.5)
+    attendance = st.number_input("📊 Attendance (%)", 0.0, 100.0)
+    
+with col2:
+    internal = st.number_input("📝 Internal Marks", 0.0, 30.0)
+    previous = st.number_input("📈 Previous Score", 0.0, 100.0)
+
+if st.button("🔮 Predict Performance"):
+    input_df = pd.DataFrame([[study_hours, attendance, internal, previous]], columns=features)
     input_scaled = scaler.transform(input_df)
-    prediction = model.predict(input_scaled)
-    probability = model.predict_proba(input_scaled)[0][1]
 
-    st.divider()
+    pass_prob = clf.predict_proba(input_scaled)[0][1]
+    predicted_marks = reg.predict(input_scaled)[0]
 
-    if prediction[0] == 1:
-        st.success(f"🎉 **PASS**")
+    # Risk category
+    if pass_prob < 0.4:
+        risk = "🔴 High Risk"
+        color = "red"
+    elif pass_prob < 0.7:
+        risk = "🟡 Medium Risk"
+        color = "orange"
     else:
-        st.error(f"❌ **FAIL**")
+        risk = "🟢 Safe Zone"
+        color = "green"
 
-    st.info(f"📈 **Pass Probability:** {probability*100:.2f}%")
+    st.markdown("---")
+    st.markdown(f"### 🧠 Prediction Result")
+    st.metric("Pass Probability", f"{pass_prob*100:.2f}%")
+    st.metric("Estimated Marks", f"{predicted_marks:.2f} / 100")
+    st.markdown(f"<h3 style='color:{color}'>{risk}</h3>", unsafe_allow_html=True)
 
-# -----------------------------
-# Footer
-# -----------------------------
+# ------------------ VISUAL ANALYTICS ------------------
 st.markdown("---")
-st.caption("Built with ❤️ using Streamlit & Logistic Regression")
+st.subheader("📊 Dataset Insights")
+
+fig, ax = plt.subplots()
+ax.hist(df["TotalMarks"], bins=30)
+ax.set_title("Marks Distribution")
+ax.set_xlabel("Total Marks")
+ax.set_ylabel("Students")
+st.pyplot(fig)
+
+st.markdown("<center><small>AI Student Predictor | Live Deployment Ready</small></center>", unsafe_allow_html=True)
