@@ -22,20 +22,46 @@ def load_data():
 
 df = load_data()
 
+# ------------------ SAFETY CHECK ------------------
+if df["Result"].nunique() < 2:
+    st.error("❌ Dataset must contain BOTH Pass and Fail students for training.")
+    st.stop()
+
 # ------------------ MODEL TRAINING ------------------
 features = ["StudyHours", "Attendance", "InternalMarks", "PreviousScore"]
 X = df[features]
 y_class = df["Result"]
 y_marks = df["TotalMarks"]
 
+# Safety check
+if y_class.nunique() < 2:
+    st.error("❌ Dataset must have both PASS and FAIL samples.")
+    st.stop()
+
 scaler = StandardScaler()
 X_scaled = scaler.fit_transform(X)
 
 X_train, X_test, y_train, y_test = train_test_split(
-    X_scaled, y_class, test_size=0.2, random_state=42
+    X_scaled, y_class, test_size=0.2, random_state=42, stratify=y_class
 )
 
-clf = LogisticRegression()
+clf = LogisticRegression(
+    max_iter=1000,
+    solver="liblinear"
+)
+clf.fit(X_train, y_train)
+
+reg = RandomForestRegressor(
+    n_estimators=100,
+    random_state=42
+)
+reg.fit(X_scaled, y_marks)
+
+accuracy = accuracy_score(y_test, clf.predict(X_test))
+
+
+clf = LogisticRegression(max_iter=1000, solver="liblinear")
+
 clf.fit(X_train, y_train)
 
 reg = RandomForestRegressor(n_estimators=100, random_state=42)
@@ -97,3 +123,4 @@ ax.set_ylabel("Students")
 st.pyplot(fig)
 
 st.markdown("<center><small>AI Student Predictor | Live Deployment Ready</small></center>", unsafe_allow_html=True)
+
